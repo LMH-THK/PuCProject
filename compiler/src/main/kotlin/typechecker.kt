@@ -175,6 +175,9 @@ fun infer(ctx: Context, expr: Expr): MonoType {
       val tyBody = infer(ctx.put(expr.binder, PolyType.fromMono(tyBinder)), expr.body)
       MonoType.FunType(tyBinder, tyBody)
     }
+
+    is Expr.AssertTrue -> MonoType.BoolTy
+    is Expr.AssertFalse -> MonoType.BoolTy
   }
 }
 
