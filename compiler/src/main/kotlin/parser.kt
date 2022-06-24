@@ -14,6 +14,7 @@ sealed class Token {
   object LET : Token()
   object REC : Token()
   object IN : Token()
+  //object DEF : Token()
 
   object INT : Token()
   object BOOL : Token()
@@ -27,6 +28,12 @@ sealed class Token {
   object BACKSLASH : Token()
   object EQUALS : Token()
   object COLON : Token()
+  object SEMICOLON : Token()
+
+  object ASSERTTRUE : Token()
+  object ASSERTFALSE : Token()
+  /*object ASSERTEQUAL : Token()
+  object ASSERTTYPE : Token()*/
 
   // Literal
   data class BOOL_LIT(val bool: Boolean) : Token()
@@ -82,6 +89,7 @@ class Lexer(input: String) {
       '/' -> Token.DIVIDES
       '*' -> Token.MULTIPLY
       '#' -> Token.HASH
+      ';' -> Token.SEMICOLON
       '-' -> if (iter.peek() == '>') {
         iter.next()
         Token.ARROW
@@ -131,6 +139,9 @@ class Lexer(input: String) {
       "Int" -> Token.INT
       "Bool" -> Token.BOOL
       "String" -> Token.STRING
+      //"def" -> Token.DEF
+      "assertTrue" -> Token.ASSERTTRUE
+      "assertFalse" -> Token.ASSERTFALSE
       else -> Token.IDENT(res)
     }
   }
@@ -234,6 +245,17 @@ class Parser(val lexer: Lexer) {
     return expr
   }
 
+  fun parseAssertTrue(): Expr {
+    expect<Token.ASSERTTRUE>("assertTrue")
+    val expr = parseExpression()
+    return Expr.AssertTrue(expr)
+  }
+  fun parseAssertFalse(): Expr {
+    expect<Token.ASSERTFALSE>("assertFalse")
+    val expr = parseExpression()
+    return Expr.AssertFalse(expr)
+  }
+
   fun parseAtom(): Expr? {
     return when (lexer.lookahead()) {
       is Token.INT_LIT -> parseInt()
@@ -241,6 +263,7 @@ class Parser(val lexer: Lexer) {
       is Token.STRING_LIT -> parseString()
       is Token.BACKSLASH -> parseLambda()
       is Token.LET -> parseLet()
+      //is Token.DEF -> parseDef()
       is Token.IF -> parseIf()
       is Token.IDENT -> parseVar()
       is Token.LPAREN -> {
@@ -249,6 +272,8 @@ class Parser(val lexer: Lexer) {
         expect<Token.RPAREN>("closing paren")
         inner
       }
+      is Token.ASSERTTRUE -> parseAssertTrue()
+      is Token.ASSERTFALSE -> parseAssertFalse()
       else -> null
     }
   }
@@ -350,9 +375,10 @@ fun test(input: String) {
 
 fun main() {
 //  testLex("""-> => == / * + -""")
-  testLex(
+  /*testLex(
     """
       "Hello"
    """.trimMargin()
-  )
+  )*/
+  testLex("""assertTrue false;""".trimMargin())
 }

@@ -12,6 +12,11 @@ sealed class Expr {
   data class IntLiteral(val num: Int) : Expr()
   data class BoolLiteral(val bool: Boolean) : Expr()
   data class StringLiteral(val string: String) : Expr()
+
+  // data class Semicolon(val expr: Expr): Expr()  // Maybe nicht als Expr, weil wenns ne Expr ist, dann braucht man auch nen Typen
+
+  data class AssertTrue(val expr: Expr): Expr()
+  data class AssertFalse(val expr: Expr): Expr()
 }
 
 enum class Operator {
@@ -100,6 +105,7 @@ fun eval(env: Env, expr: Expr): Value {
         else -> env.get(expr.name) ?: throw Exception("Unbound variable ${expr.name}")
       }
     is Expr.App -> {
+      println(expr)
       val func = eval(env, expr.func)
       if (func !is Value.Closure) {
         throw Exception("$func is not a function")
@@ -109,6 +115,31 @@ fun eval(env: Env, expr: Expr): Value {
         eval(newEnv, func.body)
       }
     }
+    is Expr.AssertTrue -> {
+      val evaluated = eval(env, expr.expr)
+
+      if (evaluated !is Value.Bool) {
+        throw Exception("Expected a boolean expression, but got $evaluated")
+      }
+      return if (evaluated.bool) {
+        Value.Bool(true)
+      } else {
+        throw Exception("Expected a boolean that is true")
+      }
+    }
+    is Expr.AssertFalse -> {
+      val evaluated = eval(env, expr.expr)
+
+      if (evaluated !is Value.Bool) {
+        throw Exception("Expected a boolean expression, but got $evaluated")
+      }
+      return if (!evaluated.bool) {
+        Value.Bool(true)
+      } else {
+        throw Exception("Expected a boolean that is false")
+      }
+    }
+    //is Expr.Semicolon -> eval(env, expr.expr)
   }
 }
 
@@ -172,6 +203,8 @@ val initialEnv: Env = persistentHashMapOf(
 // fib(1) = 1
 // fib(x) = fib (x - 1) + fib (x - 2)
 
+val failedUnitTests = mutableListOf<String>()
+
 fun testInput(input: String) {
   val expr = Parser(Lexer(input)).parseExpression()
   val ty = infer(initialContext, expr)
@@ -180,14 +213,24 @@ fun testInput(input: String) {
 }
 
 fun main() {
-  testInput("""
+  /*testInput("""
     let hello = "Hello" in
     let world = "World" in
     let join = \s1 => \s2 => s1 # " " # s2 in
     let shout = \s => s # "!" in
     let twice = \f => \x => f (f x) in
     twice (twice shout) (join hello world)
+  """.trimIndent())*/
+
+  // TODO: def nur im Toplevel-Bereich erlauben
+  testInput("""
+    assertFalse false;
+    assertTrue true
   """.trimIndent())
 
 
 }
+
+// failedTests
+// [assertTrue test 11, Expected a boolean that is true]
+// [assertTrue test 11: Expected a boolean that is true, assertTrue test 9: Expected a boolean that is true]
