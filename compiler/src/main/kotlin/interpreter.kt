@@ -8,17 +8,23 @@ sealed class Expr {
     data class If(val condition: Expr, val thenBranch: Expr, val elseBranch: Expr) : Expr()
     data class Binary(val left: Expr, val op: Operator, val right: Expr) : Expr()
     data class Let(val recursive: Boolean, val binder: String, val expr: Expr, val body: Expr) : Expr()
+    data class Def(val recursive: Boolean, val binder: String, val expr: Expr) : Expr()
 
     data class IntLiteral(val num: Int) : Expr()
     data class BoolLiteral(val bool: Boolean) : Expr()
     data class StringLiteral(val string: String) : Expr()
 
-    // data class Semicolon(val expr: Expr): Expr()  // Maybe nicht als Expr, weil wenns ne Expr ist, dann braucht man auch nen Typen
-
     data class AssertTrue(val expr: Expr) : Expr()
     data class AssertFalse(val expr: Expr) : Expr()
     data class AssertEqual(val left: Expr, val right: Expr) : Expr()
+    data class AssertNotEqual(val left: Expr, val right: Expr) : Expr()
     data class AssertType(val value: Expr, val type: MonoType) : Expr()
+    data class AssertNotType(val value: Expr, val type: MonoType) : Expr()
+    data class AssertThrows(val expr: Expr) : Expr()
+    data class AssertGreaterThan(val left: Expr, val right: Expr) : Expr()
+    data class AssertGreaterEqualThan(val left: Expr, val right: Expr) : Expr()
+    data class AssertSmallerThan(val left: Expr, val right: Expr) : Expr()
+    data class AssertSmallerEqualThan(val left: Expr, val right: Expr) : Expr()
 }
 
 enum class Operator {
@@ -117,21 +123,20 @@ fun eval(env: Env, expr: Expr): Value {
                     val x = env["x"]!! as Value.Int
                     Value.String(x.num.toChar().toString())
                 }
-                else -> env.get(expr.name) ?: throw Exception("Unbound variable ${expr.name}")
+                else -> env.get(expr.name) ?: globalEnv.get(expr.name) ?: throw Exception("Unbound variable ${expr.name}")
+
             }
         is Expr.App -> {
-            //println(expr)
             val func = eval(env, expr.func)
             if (func !is Value.Closure) {
                 throw Exception("$func is not a function")
             } else {
                 val arg = eval(env, expr.arg)
+                //globalEnv = globalEnv.put(func.binder, arg)
                 val newEnv = func.env.put(func.binder, arg)
                 eval(newEnv, func.body)
             }
         }
-
-
         is Expr.AssertTrue -> {
             try {
                 val evaluated = eval(env, expr.expr)
@@ -178,6 +183,20 @@ fun eval(env: Env, expr: Expr): Value {
                 testFailed(expr, exception.message!!)
             }
         }
+        is Expr.AssertNotEqual -> {
+            try {
+                val lEval = eval(env, expr.left)
+                val rEval = eval(env, expr.right)
+
+                return if (lEval == rEval) {
+                    testFailed(expr, "$lEval is equal to $rEval")
+                } else {
+                    testPassed(expr)
+                }
+            } catch (exception: Exception) {
+                testFailed(expr, exception.message!!)
+            }
+        }
         is Expr.AssertType -> {
             try {
                 val value = eval(env, expr.value)
@@ -196,8 +215,6 @@ fun eval(env: Env, expr: Expr): Value {
                     is MonoType.FunType -> {
                         if (value is Value.Closure) {
                             val ty = infer(initialContext, expr.value)
-                            println(prettyPoly(generalize(initialContext, applySolution(ty))))
-                            println(ty)
                             if (ty == expr.type) {
                                 passed = true
                             } else {
@@ -207,17 +224,27 @@ fun eval(env: Env, expr: Expr): Value {
                                 } else if (prettyTy.contains("forall")) {
                                     val letterToReplace = prettyTy[7]
                                     prettyTy = prettyTy.substring(10, prettyTy.length)
-                                    val splittedExpectedType = expr.type.toString().split(" ")
+                                    val splittedExpectedType = expr.type.toString().split(" ", ) as MutableList
                                     val splittedPrettyTy = prettyTy.split(" ")
-                                    println(prettyTy)
                                     for (i in 0..splittedPrettyTy.size) {
+                                        if (splittedExpectedType[i][0] == '(') {
+                                            var typeBuilder = splittedExpectedType[i]
+                                            for (j in i+1..splittedPrettyTy.size) {
+                                                typeBuilder += " ${splittedExpectedType[j]}"
+                                                if (splittedExpectedType[j].last() == ')') {
+                                                    break
+                                                }
+                                            }
+                                            splittedExpectedType[i] = typeBuilder
+                                        }
                                         if (splittedExpectedType[i] != splittedPrettyTy[i] && splittedPrettyTy[i] == "$letterToReplace") {
-                                            prettyTy = prettyTy.replace("$letterToReplace", splittedExpectedType[i].replace(")", "").replace("(", ""))
-                                            print(prettyTy)
+                                            prettyTy = prettyTy.replace("$letterToReplace", splittedExpectedType[i])
                                             break
                                         }
                                     }
                                     if (prettyTy == expr.type.toString()) {
+                                        passed = true
+                                    } else if (prettyTy.replace("(", "").replace(")", "") == expr.type.toString().replace("(", "").replace(")", "")) {
                                         passed = true
                                     }
                                 }
@@ -240,7 +267,111 @@ fun eval(env: Env, expr: Expr): Value {
                 testFailed(expr, exception.message!!)
             }
         }
-        //is Expr.Semicolon -> eval(env, expr.expr)
+        is Expr.AssertNotType -> {
+            val result = eval(env, Expr.AssertType(expr.value, expr.type))
+            when (result) {
+                is Value.Bool -> {
+                    if (result.bool) {
+                        passedTests.removeLast()
+                        testFailed(expr, "${expr.value} is from type ${expr.type}")
+                    } else {
+                        failedTests.removeLast()
+                        testPassed(expr)
+                    }
+                }
+                else -> throw Exception("Something went wrong!")
+            }
+        }
+        is Expr.AssertThrows -> {
+            try {
+                val result = eval(env, expr.expr)
+                testFailed(expr, "Did not throw a exception")
+            } catch (exception: Exception) {
+                testPassed(expr)
+            } catch (error: Error) {
+                testPassed(expr)
+            }
+        }
+        is Expr.AssertGreaterThan -> {
+            try {
+                val lEval = eval(env, expr.left)
+                val rEval = eval(env, expr.right)
+                if (lEval !is Value.Int)
+                    return testFailed(expr, "$lEval is not a number")
+                if (rEval !is Value.Int)
+                    return testFailed(expr, "$rEval is not a number")
+
+                return if (lEval.num > rEval.num) {
+                    testPassed(expr)
+                } else {
+                    testFailed(expr, "$lEval is not greater than $rEval")
+                }
+            } catch (exception: Exception) {
+                testFailed(expr, exception.message!!)
+            }
+        }
+        is Expr.AssertGreaterEqualThan -> {
+            try {
+                val lEval = eval(env, expr.left)
+                val rEval = eval(env, expr.right)
+                if (lEval !is Value.Int)
+                    return testFailed(expr, "$lEval is not a number")
+                if (rEval !is Value.Int)
+                    return testFailed(expr, "$rEval is not a number")
+
+                return if (lEval.num >= rEval.num) {
+                    testPassed(expr)
+                } else {
+                    testFailed(expr, "$lEval is not greater than $rEval")
+                }
+            } catch (exception: Exception) {
+                testFailed(expr, exception.message!!)
+            }
+        }
+        is Expr.AssertSmallerThan -> {
+            try {
+                val lEval = eval(env, expr.left)
+                val rEval = eval(env, expr.right)
+                if (lEval !is Value.Int)
+                    return testFailed(expr, "$lEval is not a number")
+                if (rEval !is Value.Int)
+                    return testFailed(expr, "$rEval is not a number")
+
+                return if (lEval.num < rEval.num) {
+                    testPassed(expr)
+                } else {
+                    testFailed(expr, "$lEval is not greater than $rEval")
+                }
+            } catch (exception: Exception) {
+                testFailed(expr, exception.message!!)
+            }
+        }
+        is Expr.AssertSmallerEqualThan -> {
+            try {
+                val lEval = eval(env, expr.left)
+                val rEval = eval(env, expr.right)
+                if (lEval !is Value.Int)
+                    return testFailed(expr, "$lEval is not a number")
+                if (rEval !is Value.Int)
+                    return testFailed(expr, "$rEval is not a number")
+
+                return if (lEval.num <= rEval.num) {
+                    testPassed(expr)
+                } else {
+                    testFailed(expr, "$lEval is not greater than $rEval")
+                }
+            } catch (exception: Exception) {
+                testFailed(expr, exception.message!!)
+            }
+        }
+        is Expr.Def -> {
+            val evaledExpr = eval(globalEnv, expr.expr)
+            if (expr.recursive && evaledExpr is Value.Closure) {
+                globalEnv = globalEnv.put(expr.binder, evaledExpr)
+            }
+            globalEnv = globalEnv.put(expr.binder, evaledExpr)
+            evaledExpr
+        }
     }
 }
 
@@ -293,30 +424,26 @@ val initialEnv: Env = persistentHashMapOf(
         Expr.Var("#codeChar")
     )
 )
-//val x = Expr.Var("x")
-//val y = Expr.Var("y")
-//val v = Expr.Var("v")
-//val f = Expr.Var("f")
-//
-//val innerZ = Expr.Lambda("v", Expr.App(Expr.App(x, x), v))
-//val innerZ1 = Expr.Lambda("x", Expr.App(f, innerZ))
-//val z = Expr.Lambda("f", Expr.App(innerZ1, innerZ1))
 
-// Hausaufgabe:
-// Fibonacci Funktion implementieren
-// fib(0) = 1
-// fib(1) = 1
-// fib(x) = fib (x - 1) + fib (x - 2)
+var globalEnv: Env = persistentHashMapOf()
 
 fun prettyPrintTests(expr: Expr): String {
     return when (expr) {
-        is Expr.AssertTrue -> "assertTrue ${prettyPrintTests(expr.expr)}"
-        is Expr.AssertFalse -> "assertFalse ${prettyPrintTests(expr.expr)}"
-        is Expr.AssertEqual -> "assertEqual ${prettyPrintTests(expr.left)} ${prettyPrintTests(expr.right)}"
-        is Expr.AssertType -> "assertType ${prettyPrintTests(expr.value)} ${expr.type}"
-        is Expr.App -> "${prettyPrintTests(expr.func)} ${prettyPrintTests(expr.arg)}"
+        is Expr.AssertTrue -> "assertTrue ${prettyPrintTests(expr.expr)};"
+        is Expr.AssertFalse -> "assertFalse ${prettyPrintTests(expr.expr)};"
+        is Expr.AssertEqual -> "assertEqual ${prettyPrintTests(expr.left)} ${prettyPrintTests(expr.right)};"
+        is Expr.AssertNotEqual -> "assertNotEqual ${prettyPrintTests(expr.left)} ${prettyPrintTests(expr.right)};"
+        is Expr.AssertType -> "assertType ${prettyPrintTests(expr.value)} ${expr.type};"
+        is Expr.AssertNotType -> "assertNotType ${prettyPrintTests(expr.value)} ${expr.type};"
+        is Expr.AssertThrows -> "assertThrows ${prettyPrintTests(expr.expr)};"
+        is Expr.AssertGreaterThan -> "assertGreaterThan ${prettyPrintTests(expr.left)} ${prettyPrintTests(expr.right)};"
+        is Expr.AssertGreaterEqualThan -> "assertGreaterEqualThan ${prettyPrintTests(expr.left)} ${prettyPrintTests(expr.right)};"
+        is Expr.AssertSmallerThan -> "assertSmallerThan ${prettyPrintTests(expr.left)} ${prettyPrintTests(expr.right)};"
+        is Expr.AssertSmallerEqualThan -> "assertSmallerEqualThan ${prettyPrintTests(expr.left)} ${prettyPrintTests(expr.right)};"
+
+        is Expr.App -> "(${prettyPrintTests(expr.func)} ${prettyPrintTests(expr.arg)})"
         is Expr.Binary -> {
-            var string = prettyPrintTests(expr.left)
+            var string = "(" + prettyPrintTests(expr.left)
             string += when (expr.op) {
                 Operator.Add -> "+"
                 Operator.Subtract -> "-"
@@ -325,7 +452,7 @@ fun prettyPrintTests(expr: Expr): String {
                 Operator.Equality -> "=="
                 Operator.Concat -> "#"
             }
-            string += prettyPrintTests(expr.right)
+            string += prettyPrintTests(expr.right) + ")"
             string
         }
         is Expr.BoolLiteral -> "${expr.bool}"
@@ -340,29 +467,32 @@ fun prettyPrintTests(expr: Expr): String {
         is Expr.StringLiteral -> "\"${expr.string}\""
         is Expr.Var -> expr.name
         is Expr.Let -> ""
+        is Expr.Def -> ""
     }
 }
 
 fun testInput(input: String) {
-    val expr = Parser(Lexer(input)).parseExpression()
-    val ty = infer(initialContext, expr)
+    //val expr = Parser(Lexer(input)).parseExpression()
+    val expressions = Parser(Lexer(input)).parseAll()
 
-    //println("${eval(initialEnv, expr)} : ${prettyPoly(generalize(initialContext, applySolution(ty)))}")
-    eval(initialEnv, expr)
-    generalize(initialContext, applySolution(ty))
+    for (expr in expressions) {
+        val ty = infer(initialContext, expr)
 
+        //println("${eval(initialEnv, expr)} : ${prettyPoly(generalize(initialContext, applySolution(ty)))}")
+        eval(initialEnv, expr)
+        generalize(initialContext, applySolution(ty))
+    }
 
     if (passedTests.isNotEmpty()) {
         println("\n\u001B[32mPassed Tests:\u001B[0m")
         for (test in passedTests) {
-            //println("\u001B[32m${test}")
-            println("\u001B[32m${prettyPrintTests(test)}")
+            println("\u001B[32m${prettyPrintTests(test)}\u001B[0m\n")
         }
     }
     if (failedTests.isNotEmpty()) {
         println("\n\u001B[31mFailed Tests:\u001B[0m")
         for (test in failedTests) {
-            println("\u001B[31mExpression: ${prettyPrintTests(test.first)}\nReason: : ${test.second}\u001B[0m\n")
+            println("\u001B[31mExpression: ${prettyPrintTests(test.first)}\nReason: ${test.second}\u001B[0m\n")
         }
     }
 }
@@ -377,22 +507,16 @@ fun main() {
       twice (twice shout) (join hello world)
     """.trimIndent())*/
 
-    // TODO: def nur im Toplevel-Bereich erlauben
     testInput(
-        """ 
-           assertType (\x => \y => \z => if x then y else (z 10)) (Bool -> Int -> (Int -> Int) -> Int)
+        """
+            def test = (\x => \y => \z => if x then y else z);
+            assertType (test) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Int -> Bool));
+            
+            
         """.trimIndent()
     )
-// assertType (\x: Int => x) (Int -> Bool)
-
 }
-
-// let f = \x => \y => x+y in
-//    assertEqual f 5 5 10
-
-// failedTests
-// [assertTrue test 11, Expected a boolean that is true]
-// [assertTrue test 11: Expected a boolean that is true, assertTrue test 9: Expected a boolean that is true]
 
 
 // assertType (\x => \y => \z => if x then y else z 10) (Bool -> Bool -> (Int -> Bool) -> Bool)
+// def rec fib = \x: Int => if (x == 0) then 1 else if (x == 1) then 1 else fib (x-1) + fib (x-2);

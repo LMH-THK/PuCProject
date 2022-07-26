@@ -104,7 +104,7 @@ fun prettyTy(ty: MonoType, nested: Boolean = false): String {
 
 typealias Context = PersistentMap<String, PolyType>
 
-val initialContext: Context = persistentHashMapOf(
+var initialContext: Context = persistentHashMapOf(
     "firstChar" to PolyType.fromMono(monoTy("String -> String")),
     "remainingChars" to PolyType.fromMono(monoTy("String -> String")),
     "charCode" to PolyType.fromMono(monoTy("String -> Int")),
@@ -179,7 +179,26 @@ fun infer(ctx: Context, expr: Expr): MonoType {
         is Expr.AssertTrue -> MonoType.BoolTy
         is Expr.AssertFalse -> MonoType.BoolTy
         is Expr.AssertEqual -> MonoType.BoolTy
+        is Expr.AssertNotEqual -> MonoType.BoolTy
         is Expr.AssertType -> MonoType.BoolTy
+        is Expr.AssertNotType -> MonoType.BoolTy
+        is Expr.AssertThrows -> MonoType.BoolTy
+        is Expr.AssertGreaterThan -> MonoType.BoolTy
+        is Expr.AssertGreaterEqualThan -> MonoType.BoolTy
+        is Expr.AssertSmallerThan -> MonoType.BoolTy
+        is Expr.AssertSmallerEqualThan -> MonoType.BoolTy
+
+        is Expr.Def -> {
+            val tyExpr = freshUnknown()
+            if (expr.recursive) {
+                shouldEqual(infer(ctx.put(expr.binder, PolyType.fromMono(tyExpr)), expr.expr), tyExpr, "Recursive def fail")
+            } else {
+                shouldEqual(infer(ctx, expr.expr), tyExpr, "Should never happen")
+            }
+            val tyExprPoly = generalize(ctx, applySolution(tyExpr))
+            initialContext = ctx.put(expr.binder, applySolution(tyExprPoly))
+            tyExpr
+        }
     }
 }
 
