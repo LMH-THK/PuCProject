@@ -345,13 +345,13 @@ class Parser(val lexer: Lexer) {
     fun parseAssertNotType(): Expr {
         expect<Token.ASSERTNOTTYPE>("assertNotType")
         val value = when (lexer.lookahead()) {
-            is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT -> {
+            is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT, is Token.LPAREN -> {
                 parseAtom() ?: throw Exception("Expected Atom but got ${lexer.lh}")
             }
             is Token.IDENT -> parseApplication()
             is Token.IF -> parseIf()
             is Token.BACKSLASH -> parseLambda()
-            is Token.LPAREN -> parseExpression()
+            //is Token.LPAREN -> parseExpression()
             else -> throw Exception("Expected Atom or Expression but got ${lexer.lh}")
         }
         val type = parseType()

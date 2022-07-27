@@ -175,7 +175,17 @@ fun eval(env: Env, expr: Expr): Value {
                 val rEval = eval(env, expr.right)
 
                 return if (lEval != rEval) {
-                    testFailed(expr, "$lEval is not equal to $rEval")
+                    // Could mean, that Closure.env is not equal
+                    if (lEval is Value.Closure && rEval is Value.Closure) {
+                        // Check if everything except the Env is Equal
+                        if (lEval.binder == rEval.binder && lEval.body == rEval.body) {
+                            testPassed(expr)
+                        } else {
+                            testFailed(expr, "$lEval is not equal to $rEval")
+                        }
+                    } else {
+                        testFailed(expr, "$lEval is not equal to $rEval")
+                    }
                 } else {
                     testPassed(expr)
                 }
@@ -191,7 +201,17 @@ fun eval(env: Env, expr: Expr): Value {
                 return if (lEval == rEval) {
                     testFailed(expr, "$lEval is equal to $rEval")
                 } else {
-                    testPassed(expr)
+                    // Could mean, that only Closure.env is not equal
+                    if (lEval is Value.Closure && rEval is Value.Closure) {
+                        // Check if everything except the Env is Equal
+                        if (lEval.binder == rEval.binder && lEval.body == rEval.body) {
+                            testFailed(expr, "$lEval is equal to $rEval")
+                        } else {
+                            testPassed(expr)
+                        }
+                    } else {
+                        testPassed(expr)
+                    }
                 }
             } catch (exception: Exception) {
                 testFailed(expr, exception.message!!)
@@ -224,12 +244,12 @@ fun eval(env: Env, expr: Expr): Value {
                                 } else if (prettyTy.contains("forall")) {
                                     val letterToReplace = prettyTy[7]
                                     prettyTy = prettyTy.substring(10, prettyTy.length)
-                                    val splittedExpectedType = expr.type.toString().split(" ", ) as MutableList
+                                    val splittedExpectedType = expr.type.toString().split(" ") as MutableList
                                     val splittedPrettyTy = prettyTy.split(" ")
                                     for (i in 0..splittedPrettyTy.size) {
                                         if (splittedExpectedType[i][0] == '(') {
                                             var typeBuilder = splittedExpectedType[i]
-                                            for (j in i+1..splittedPrettyTy.size) {
+                                            for (j in i + 1..splittedPrettyTy.size) {
                                                 typeBuilder += " ${splittedExpectedType[j]}"
                                                 if (splittedExpectedType[j].last() == ')') {
                                                     break
@@ -244,8 +264,31 @@ fun eval(env: Env, expr: Expr): Value {
                                     }
                                     if (prettyTy == expr.type.toString()) {
                                         passed = true
-                                    } else if (prettyTy.replace("(", "").replace(")", "") == expr.type.toString().replace("(", "").replace(")", "")) {
-                                        passed = true
+                                    } else {
+                                        var offset = 0
+                                        var equalChars = 0
+                                        if ((prettyTy.length - expr.type.toString().length) % 2 == 0) {
+                                            for (i in 0 until prettyTy.length) {
+                                                try {
+                                                    if (prettyTy[i] == expr.type.toString()[i - offset]) {
+                                                        equalChars += 1
+                                                    } else {
+                                                        if (prettyTy[i] == '(' || prettyTy[i] == ')') {
+                                                            offset++
+                                                        }
+                                                    }
+                                                } catch (e: IndexOutOfBoundsException) {
+                                                    if (prettyTy[i] == '(' || prettyTy[i] == ')') {
+                                                        offset++
+                                                    }
+                                                    if (prettyTy[i] == expr.type.toString()[i - offset])
+                                                        equalChars += 1
+                                                }
+                                            }
+                                            if (offset % 2 == 0 && equalChars == expr.type.toString().length) {
+                                                passed = true
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -509,14 +552,18 @@ fun main() {
 
     testInput(
         """
-            def test = (\x => \y => \z => if x then y else z);
-            assertType (test) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Int -> Bool));
-            
-            
+            assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Int -> Bool));
+            assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> Int -> Bool);
         """.trimIndent()
     )
 }
 
+//def rec fib = \x: Int => if (x == 0) then 1 else if (x == 1) then 1 else fib (x-1) + fib (x-2);
+//            def test = (\x => \y => \z => if x then y else z);
+//            assertType (test) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Int -> Bool));
+//
+//            assertEqual (test) (\x => \y => \z => if x then y else z);
+//
 
 // assertType (\x => \y => \z => if x then y else z 10) (Bool -> Bool -> (Int -> Bool) -> Bool)
 // def rec fib = \x: Int => if (x == 0) then 1 else if (x == 1) then 1 else fib (x-1) + fib (x-2);
