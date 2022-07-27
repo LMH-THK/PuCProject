@@ -285,7 +285,7 @@ fun eval(env: Env, expr: Expr): Value {
                                                         equalChars += 1
                                                 }
                                             }
-                                            if (offset % 2 == 0 && equalChars == expr.type.toString().length) {
+                                            if (offset == 2 && equalChars == expr.type.toString().length) {
                                                 passed = true
                                             }
                                         }
