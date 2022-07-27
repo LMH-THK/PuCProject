@@ -37,10 +37,16 @@ enum class Operator {
 }
 
 val passedTests = mutableListOf<Expr>()
+val passedThrowTests = mutableListOf<Pair<Expr, String>>()
 val failedTests = mutableListOf<Pair<Expr, String>>()
 
 fun testPassed(expr: Expr): Value.Bool {
     passedTests.add(expr)
+    return Value.Bool(true)
+}
+
+fun testPassed(expr: Expr, message: String): Value.Bool {
+    passedThrowTests.add(Pair(expr, message))
     return Value.Bool(true)
 }
 
@@ -123,6 +129,7 @@ fun eval(env: Env, expr: Expr): Value {
                     val x = env["x"]!! as Value.Int
                     Value.String(x.num.toChar().toString())
                 }
+                // Erst Lokal suchen, dann Global
                 else -> env.get(expr.name) ?: globalEnv.get(expr.name) ?: throw Exception("Unbound variable ${expr.name}")
 
             }
@@ -234,18 +241,22 @@ fun eval(env: Env, expr: Expr): Value {
                     }
                     is MonoType.FunType -> {
                         if (value is Value.Closure) {
+                            // Typ ermitteln
                             val ty = infer(initialContext, expr.value)
                             if (ty == expr.type) {
                                 passed = true
                             } else {
                                 var prettyTy = prettyPoly(generalize(initialContext, applySolution(ty)))
+                                // Vergleiche mit Typ als String
                                 if (prettyTy == expr.type.toString()) {
                                     passed = true
-                                } else if (prettyTy.contains("forall")) {
+                                } else if (prettyTy.contains("forall")) {  // Typ ist Polymorph
                                     val letterToReplace = prettyTy[7]
                                     prettyTy = prettyTy.substring(10, prettyTy.length)
                                     val splittedExpectedType = expr.type.toString().split(" ") as MutableList
                                     val splittedPrettyTy = prettyTy.split(" ")
+
+                                    // Überprüfen ob Einzusetzender Typ ein FunType ist
                                     for (i in 0..splittedPrettyTy.size) {
                                         if (splittedExpectedType[i][0] == '(') {
                                             var typeBuilder = splittedExpectedType[i]
@@ -257,14 +268,19 @@ fun eval(env: Env, expr: Expr): Value {
                                             }
                                             splittedExpectedType[i] = typeBuilder
                                         }
+                                        // Einzusetzenden Typ einsetzen
                                         if (splittedExpectedType[i] != splittedPrettyTy[i] && splittedPrettyTy[i] == "$letterToReplace") {
                                             prettyTy = prettyTy.replace("$letterToReplace", splittedExpectedType[i])
                                             break
                                         }
                                     }
+                                    // Überprüfen ob es mit eingesetzten Typ übereinstimmt
                                     if (prettyTy == expr.type.toString()) {
                                         passed = true
                                     } else {
+                                        // Könnte sein, dass der Rückgabewert der Funktion eine Funktion ist
+                                        // (Compiler übbernimmt nicht die Letzten Klammern)
+                                        // Bool -> (Int -> Bool) wird im Typ zu Bool -> Int -> Bool
                                         var offset = 0
                                         var equalChars = 0
                                         if ((prettyTy.length - expr.type.toString().length) % 2 == 0) {
@@ -285,6 +301,7 @@ fun eval(env: Env, expr: Expr): Value {
                                                         equalChars += 1
                                                 }
                                             }
+                                            // Überprüfen ob Alle bis auf 2 Zeichen (Die Fehlenden Klammern) gleich sind ==> Gleichheit
                                             if (offset == 2 && equalChars == expr.type.toString().length) {
                                                 passed = true
                                             }
@@ -330,9 +347,9 @@ fun eval(env: Env, expr: Expr): Value {
                 val result = eval(env, expr.expr)
                 testFailed(expr, "Did not throw a exception")
             } catch (exception: Exception) {
-                testPassed(expr)
+                testPassed(expr, exception.message!!)
             } catch (error: Error) {
-                testPassed(expr)
+                testPassed(expr, error.message!!)
             }
         }
         is Expr.AssertGreaterThan -> {
@@ -365,7 +382,7 @@ fun eval(env: Env, expr: Expr): Value {
                 return if (lEval.num >= rEval.num) {
                     testPassed(expr)
                 } else {
-                    testFailed(expr, "$lEval is not greater than $rEval")
+                    testFailed(expr, "$lEval is not greater than or equal to $rEval")
                 }
             } catch (exception: Exception) {
                 testFailed(expr, exception.message!!)
@@ -383,7 +400,7 @@ fun eval(env: Env, expr: Expr): Value {
                 return if (lEval.num < rEval.num) {
                     testPassed(expr)
                 } else {
-                    testFailed(expr, "$lEval is not greater than $rEval")
+                    testFailed(expr, "$lEval is not smaller than $rEval")
                 }
             } catch (exception: Exception) {
                 testFailed(expr, exception.message!!)
@@ -401,7 +418,7 @@ fun eval(env: Env, expr: Expr): Value {
                 return if (lEval.num <= rEval.num) {
                     testPassed(expr)
                 } else {
-                    testFailed(expr, "$lEval is not greater than $rEval")
+                    testFailed(expr, "$lEval is not smaller than or equal to $rEval")
                 }
             } catch (exception: Exception) {
                 testFailed(expr, exception.message!!)
@@ -515,7 +532,12 @@ fun prettyPrintTests(expr: Expr): String {
 }
 
 fun testInput(input: String) {
-    //val expr = Parser(Lexer(input)).parseExpression()
+    // Reset the Global Env & Tests
+    globalEnv.clear()
+    passedTests.clear()
+    passedThrowTests.clear()
+    failedTests.clear()
+
     val expressions = Parser(Lexer(input)).parseAll()
 
     for (expr in expressions) {
@@ -527,13 +549,19 @@ fun testInput(input: String) {
     }
 
     if (passedTests.isNotEmpty()) {
-        println("\n\u001B[32mPassed Tests:\u001B[0m")
+        println("\n\u001B[32mPassed tests:\u001B[0m")
         for (test in passedTests) {
             println("\u001B[32m${prettyPrintTests(test)}\u001B[0m\n")
         }
     }
+    if (passedThrowTests.isNotEmpty()) {
+        println("\n\u001B[32mPassed throwing tests:\u001B[0m")
+        for (test in passedThrowTests) {
+            println("\u001B[32m${prettyPrintTests(test.first)}\nThrows: ${test.second}\u001B[0m\n")
+        }
+    }
     if (failedTests.isNotEmpty()) {
-        println("\n\u001B[31mFailed Tests:\u001B[0m")
+        println("\n\u001B[31mFailed tests:\u001B[0m")
         for (test in failedTests) {
             println("\u001B[31mExpression: ${prettyPrintTests(test.first)}\nReason: ${test.second}\u001B[0m\n")
         }
@@ -541,29 +569,88 @@ fun testInput(input: String) {
 }
 
 fun main() {
-    /*testInput("""
-      let hello = "Hello" in
-      let world = "World" in
-      let join = \s1 => \s2 => s1 # " " # s2 in
-      let shout = \s => s # "!" in
-      let twice = \f => \x => f (f x) in
-      twice (twice shout) (join hello world)
-    """.trimIndent())*/
+    // Bool spezifische asserts
+    val showCase1 = """
+        assertTrue true;
+        assertFalse false;
+        assertTrue (\x => x) true;
+        assertTrue (\x => x) false;
+    """.trimIndent()
 
-    testInput(
-        """
-            assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Int -> Bool));
-            assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> Int -> Bool);
-        """.trimIndent()
-    )
+    // Int spezifische asserts
+    val showCase2 = """
+        assertGreaterThan 2 1;
+        assertGreaterEqualThan 2 2;
+        assertGreaterEqualThan 1 2;
+        
+        assertSmallerThan 1 2;
+        assertSmallerEqualThan 1 1;
+        assertSmallerEqualThan 2 1;
+        
+    """.trimIndent()
+
+    // assertEquals & assertNotEqual
+    val showCase3 = """
+        assertEqual 42 (21+21);
+        assertNotEqual 42 1337;
+        
+        assertEqual "Hello World!" "Hello"#" "#"World!";
+        
+        def rec fak = \x: Int => if x == 0 then 1 else x*(fak (x-1));
+        assertEqual (fak 5) 120;
+        assertEqual (fak 6) 720;
+        assertEqual (fak 7) 1337;
+        assertNotEqual (fak 0) 0;
+        assertNotEqual (fak 0) 1;
+    """.trimIndent()
+
+    // assertEquals - Beispiel aus der Präsentation
+    val showCase4 = """
+        def x = 10;
+        def y = 5;
+        assertGreaterThan x y;
+        let x = 5 in
+        let y = 10 in
+        assertSmallerThan x y;
+        assertGreaterThan x y;
+    """.trimIndent()
+
+    // assertType & assertNotType
+    val showCase5 = """
+        assertType 666 Int;
+        assertType true Bool;
+        assertType (1337 == 42) Bool;
+        assertNotType 1 Bool;
+        assertNotType 1 Int;
+        assertType "WOW!" String;
+        
+        def rec fib = \x: Int => if (x == 0) then 1 else if (x == 1) then 1 else fib (x-1) + fib (x-2);
+        assertType (fib) (Int -> Int);
+        assertNotType (fib) (Bool -> Bool);
+    """.trimIndent()
+
+    // assertType aber Polymorph
+    val showCase6 = """
+        def passThru = \x => x;
+        assertType (passThru) Int -> Int;
+        assertType (passThru) Bool -> Bool;
+        
+        assertType (passThru) Int -> Bool;
+        
+        assertType (passThru) ((Int -> Bool) -> (Int -> Bool));
+        assertType (passThru) ((Int -> Bool) -> (Bool -> Int));
+        
+        assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Int -> Bool));
+        assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Bool -> Int));       
+    """.trimIndent()
+
+    // assertThrows
+    val showCase7 = """
+        assertThrows (\x => if x then 420 else 69) false;
+        assertThrows (\x => if x then 420 else 69) 1;
+    """.trimIndent()
+
+
+    //testInput(showCase4)
+    testInput(showCase4)
 }
-
-//def rec fib = \x: Int => if (x == 0) then 1 else if (x == 1) then 1 else fib (x-1) + fib (x-2);
-//            def test = (\x => \y => \z => if x then y else z);
-//            assertType (test) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Int -> Bool));
-//
-//            assertEqual (test) (\x => \y => \z => if x then y else z);
-//
-
-// assertType (\x => \y => \z => if x then y else z 10) (Bool -> Bool -> (Int -> Bool) -> Bool)
-// def rec fib = \x: Int => if (x == 0) then 1 else if (x == 1) then 1 else fib (x-1) + fib (x-2);
