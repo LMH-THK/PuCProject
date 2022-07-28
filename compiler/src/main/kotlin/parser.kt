@@ -210,7 +210,7 @@ class Parser(val lexer: Lexer) {
         return ty
     }
 
-    fun parseTypeAtom(): MonoType {
+    private fun parseTypeAtom(): MonoType {
         return when (val t = lexer.next()) {
             is Token.BOOL -> {
                 MonoType.BoolTy
@@ -234,7 +234,7 @@ class Parser(val lexer: Lexer) {
         return parseBinary(0)
     }
 
-    fun parseBinary(minBindingPower: Int): Expr {
+    private fun parseBinary(minBindingPower: Int): Expr {
         var lhs = parseApplication()
         while (true) {
             val op = peekOperator() ?: break
@@ -267,7 +267,7 @@ class Parser(val lexer: Lexer) {
         }
     }
 
-    fun parseApplication(): Expr {
+    private fun parseApplication(): Expr {
         var expr = parseAtom() ?: throw Exception("Expected an expression")
         while (true) {
             val arg = parseAtom() ?: break
@@ -276,19 +276,19 @@ class Parser(val lexer: Lexer) {
         return expr
     }
 
-    fun parseAssertTrue(): Expr {
+    private fun parseAssertTrue(): Expr {
         expect<Token.ASSERTTRUE>("assertTrue")
         val expr = parseExpression()
         return Expr.AssertTrue(expr)
     }
 
-    fun parseAssertFalse(): Expr {
+    private fun parseAssertFalse(): Expr {
         expect<Token.ASSERTFALSE>("assertFalse")
         val expr = parseExpression()
         return Expr.AssertFalse(expr)
     }
 
-    fun parseAssertEqual(): Expr {
+    private fun parseAssertEqual(): Expr {
         expect<Token.ASSERTEQUAL>("assertEqual")
         val left = when (lexer.lookahead()) {
             is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT -> {
@@ -300,6 +300,7 @@ class Parser(val lexer: Lexer) {
             else -> throw Exception("Expected Atom or Expression but got ${lexer.lh}")
         }
         return if (left !is Expr.App) {
+            // Links ist eine Application ==> wir müssen noch einen Rechten Parameter parsen
             val right = parseExpression()
             Expr.AssertEqual(left, right)
         } else {
@@ -307,7 +308,7 @@ class Parser(val lexer: Lexer) {
         }
     }
 
-    fun parseAssertNotEqual(): Expr {
+    private fun parseAssertNotEqual(): Expr {
         expect<Token.ASSERTNOTEQUAL>("assertNotEqual")
         val left = when (lexer.lookahead()) {
             is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT -> {
@@ -326,7 +327,7 @@ class Parser(val lexer: Lexer) {
         }
     }
 
-    fun parseAssertType(): Expr {
+    private fun parseAssertType(): Expr {
         expect<Token.ASSERTTYPE>("assertType")
         val value = when (lexer.lookahead()) {
             is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT, is Token.LPAREN -> {
@@ -335,36 +336,34 @@ class Parser(val lexer: Lexer) {
             is Token.IDENT -> parseApplication()
             is Token.IF -> parseIf()
             is Token.BACKSLASH -> parseLambda()
-            //is Token.LPAREN -> parseExpression()
             else -> throw Exception("Expected Atom or Expression but got ${lexer.lh}")
         }
         val type = parseType()
         return Expr.AssertType(value, type)
     }
 
-    fun parseAssertNotType(): Expr {
+    private fun parseAssertNotType(): Expr {
         expect<Token.ASSERTNOTTYPE>("assertNotType")
         val value = when (lexer.lookahead()) {
-            is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT -> {
+            is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT, is Token.LPAREN -> {
                 parseAtom() ?: throw Exception("Expected Atom but got ${lexer.lh}")
             }
             is Token.IDENT -> parseApplication()
             is Token.IF -> parseIf()
             is Token.BACKSLASH -> parseLambda()
-            is Token.LPAREN -> parseExpression()
             else -> throw Exception("Expected Atom or Expression but got ${lexer.lh}")
         }
         val type = parseType()
         return Expr.AssertNotType(value, type)
     }
 
-    fun parseAssertThrows(): Expr {
+    private fun parseAssertThrows(): Expr {
         expect<Token.ASSERTTHROWS>("assertThrows")
         val expr = parseExpression()
         return Expr.AssertThrows(expr)
     }
 
-    fun parseAssertGreaterThan(): Expr {
+    private fun parseAssertGreaterThan(): Expr {
         expect<Token.ASSERTGREATERTHAN>("assertGreaterThan")
         val left = when (lexer.lookahead()) {
             is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT -> {
@@ -382,7 +381,7 @@ class Parser(val lexer: Lexer) {
             Expr.AssertGreaterThan(left.func, left.arg)
         }
     }
-    fun parseAssertGreaterEqualThan(): Expr {
+    private fun parseAssertGreaterEqualThan(): Expr {
         expect<Token.ASSERTGREATEREQUALTHAN>("assertGreaterEqualThan")
         val left = when (lexer.lookahead()) {
             is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT -> {
@@ -400,7 +399,7 @@ class Parser(val lexer: Lexer) {
             Expr.AssertGreaterEqualThan(left.func, left.arg)
         }
     }
-    fun parseAssertSmallerThan(): Expr {
+    private fun parseAssertSmallerThan(): Expr {
         expect<Token.ASSERTSMALLERTHAN>("assertSmallerThan")
         val left = when (lexer.lookahead()) {
             is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT -> {
@@ -418,7 +417,7 @@ class Parser(val lexer: Lexer) {
             Expr.AssertSmallerThan(left.func, left.arg)
         }
     }
-    fun parseAssertSmallerEqualThan(): Expr {
+    private fun parseAssertSmallerEqualThan(): Expr {
         expect<Token.ASSERTSMALLEREQUALTHAN>("assertSmallerEqualThan")
         val left = when (lexer.lookahead()) {
             is Token.BOOL_LIT, is Token.INT_LIT, is Token.STRING_LIT -> {
@@ -437,7 +436,7 @@ class Parser(val lexer: Lexer) {
         }
     }
 
-    fun parseAtom(): Expr? {
+    private fun parseAtom(): Expr? {
         return when (lexer.lookahead()) {
             is Token.INT_LIT -> parseInt()
             is Token.BOOL_LIT -> parseBool()
@@ -554,33 +553,6 @@ fun testLex(input: String) {
     } while (lexer.lookahead() != Token.EOF)
 }
 
-fun testParse(input: String) {
-    val parser = Parser(Lexer(input))
-    val expr = parser.parseExpression()
-    print(expr)
-}
-
-fun test(input: String) {
-    val parser = Parser(Lexer(input))
-    val expr = parser.parseExpression()
-    print(
-        eval(
-            persistentHashMapOf(), expr
-        )
-    )
-}
-
-// Hausaufgabe: Definiere Binaere Operatoren fuer
-// - && Boolsches Und  x && y || z == (x && y) || z
-// - || Boolsches Oder
-// - ^ Exponent
-
 fun main() {
-//  testLex("""-> => == / * + -""")
-    /*testLex(
-      """
-        "Hello"
-     """.trimMargin()
-    )*/
     testLex("""assertTrue false;""".trimMargin())
 }

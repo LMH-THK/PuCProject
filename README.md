@@ -1,29 +1,43 @@
-# PuCProject
+# PuCProject - Top-Level Definition und Unit-Testing
+*Von: Louis Marceau Holetzke*
 
-## Github Workflow
+## Unit-Testing
 
-### Eigenen branch in main mergen
+- Auch bekannt als Modultest oder Komponententest
+- Werden benutzt um (Teil-)Ergebnisse nachzuweisen
+- assert ⇒ feststellen
+    - Bsp. assertTrue ⇒ wahr feststellen
 
-**Pull Request** erstellen
+### Implementierte Unit Tests
 
-### Wenn main geupdated wurde bzw. wenn der eigene branch behind main ist
-
-```shell
-> git switch main
+#### Bool
+```kotlin
+assertTrue(Expr)
+assertFalse(Expr)
 ```
 
-```shell
-> git pull
+#### Int
+```kotlin
+assertGreaterThan(Expr, Expr)
+assertGreaterEqualThan(Expr, Expr)
+assertSmallerThan(Expr, Expr)
+assertSmallerEqualThan(Expr, Expr)
 ```
 
-```shell
-> git switch <branchName>
+#### Bool – Int – String – Funktionen
+```kotlin
+assertEqual(Expr, Expr)
+assertNotEqual(Expr, Expr)
+assertType(Expr, Type)
+assertNotType(Expr, Type)
+assertThrows(Expr)
 ```
 
-```shell
-> git merge main
-```
+## Top-Level Definition
+- Auch bekannt unter Globalization
+- Wird benötigt um Expressions mehrfach zu benutzen
+- def ⇒ Top-Level Definition von Expressions
+    - Bsp. def quad = λx: Int => x*x;
+    
+*Wir benötigen, wenn wir mehrere Expressions evaluieren wollen ein Trennsymbol, bspw. `;` welches in diesem Projekt auch benutzt wird.*
 
-```shell
-> git push
-```
