@@ -196,6 +196,7 @@ fun infer(ctx: Context, expr: Expr): MonoType {
                 shouldEqual(infer(ctx, expr.expr), tyExpr, "Should never happen")
             }
             val tyExprPoly = generalize(ctx, applySolution(tyExpr))
+            // Definition zum Context hinzufügen
             initialContext = ctx.put(expr.binder, applySolution(tyExprPoly))
             tyExpr
         }
@@ -263,32 +264,3 @@ fun testInfer(program: String) {
 //  println("Solution:")
 //  solution.forEach { (t1, t2) -> println("$$t1 := ${prettyTy(t2)}")}
 }
-
-fun main() {
-//  testInfer("10")
-//  testInfer("true")
-//  testInfer("if true then 10 else 20")
-    testInfer(
-        """
-    let flip = \f => \x => \y => f y x in
-    let f = \x => \y => if x == "Hello" then y else 10 in
-    f
-  """.trimIndent()
-    )
-//  testInfer("1 + 3")
-//  testInfer("1 + 2 == 3 * 4")
-//  testInfer(
-//    """
-//    let not = \x : Bool => if x then false else true in
-//    let boolEq = \x : Bool => \y : Bool => if x then y else not y in
-//    if boolEq (2 == 3) (3 == 4) then 10 else 20
-//  """.trimIndent()
-//  )
-//  testInfer(
-//    """
-//    (\x => x) true
-//  """.trimIndent()
-//  )
-}
-
-

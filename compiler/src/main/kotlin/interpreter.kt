@@ -139,7 +139,6 @@ fun eval(env: Env, expr: Expr): Value {
                 throw Exception("$func is not a function")
             } else {
                 val arg = eval(env, expr.arg)
-                //globalEnv = globalEnv.put(func.binder, arg)
                 val newEnv = func.env.put(func.binder, arg)
                 eval(newEnv, func.body)
             }
@@ -302,7 +301,7 @@ fun eval(env: Env, expr: Expr): Value {
                                                 }
                                             }
                                             // Überprüfen ob Alle bis auf 2 Zeichen (Die Fehlenden Klammern) gleich sind ==> Gleichheit
-                                            if (offset == 2 && equalChars == expr.type.toString().length) {
+                                            if (offset % 2 == 0 && equalChars == expr.type.toString().length) {
                                                 passed = true
                                             }
                                         }
@@ -487,6 +486,8 @@ val initialEnv: Env = persistentHashMapOf(
 
 var globalEnv: Env = persistentHashMapOf()
 
+// Funktion um Tests verständlich wiederzugeben
+// AssertTrue(expr=BoolLiteral(bool=true)) ==> assertTrue true;
 fun prettyPrintTests(expr: Expr): String {
     return when (expr) {
         is Expr.AssertTrue -> "assertTrue ${prettyPrintTests(expr.expr)};"
@@ -543,7 +544,6 @@ fun testInput(input: String) {
     for (expr in expressions) {
         val ty = infer(initialContext, expr)
 
-        //println("${eval(initialEnv, expr)} : ${prettyPoly(generalize(initialContext, applySolution(ty)))}")
         eval(initialEnv, expr)
         generalize(initialContext, applySolution(ty))
     }
@@ -641,7 +641,7 @@ fun main() {
         assertType (passThru) ((Int -> Bool) -> (Bool -> Int));
         
         assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Int -> Bool));
-        assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Bool -> Int));       
+        assertType (\x => \y => \z => if x then y else z) (Bool -> (Int -> Bool) -> (Int -> Bool) -> (Bool -> Int));
     """.trimIndent()
 
     // assertThrows
@@ -651,6 +651,5 @@ fun main() {
     """.trimIndent()
 
 
-    //testInput(showCase4)
-    testInput(showCase4)
+    testInput(showCase1)
 }
